@@ -399,6 +399,22 @@ void App::runCmd(const Cmd& c) {
       ev.msg = err;
       break;
     }
+    case CmdArtist: {
+      ev.kind = EvPlaylist;
+      ev.playlist.id = c.id;
+      ev.playlist.name = c.text;
+      ev.ok = api.artistSongs(c.id, ev.tracks, err);
+      ev.msg = err;
+      break;
+    }
+    case CmdAlbum: {
+      ev.kind = EvPlaylist;
+      ev.playlist.id = c.id;
+      ev.playlist.name = c.text;
+      ev.ok = api.albumSongs(c.id, ev.tracks, err);
+      ev.msg = err;
+      break;
+    }
     default:
       return;
   }
@@ -594,7 +610,7 @@ void App::handleEvent(const Event& ev) {
     }
     case EvPlaylist: {
       if (!ev.ok) {
-        showMessage("歌单", {ev.msg});
+        showMessage(ev.playlist.name.length() ? ev.playlist.name : "歌单", {ev.msg});
         break;
       }
       songs_ = ev.tracks;
@@ -939,15 +955,23 @@ void App::confirm() {
         }
       } else if (listKind_ == ListKind::Artists) {
         if (sel_ < static_cast<int>(search_.artists.size())) {
-          showMessage("歌手", {search_.artists[sel_].name, "歌手详情将在后续版本补全"},
-                      "Tab 返回");
+          Cmd c;
+          c.kind = CmdArtist;
+          c.id = search_.artists[sel_].id;
+          c.text = search_.artists[sel_].name;
+          pushCmd(c);
+          status_ = "加载歌手歌曲...";
+          dirty_ = true;
         }
       } else if (listKind_ == ListKind::Albums) {
         if (sel_ < static_cast<int>(search_.albums.size())) {
-          showMessage("专辑",
-                      {search_.albums[sel_].name, search_.albums[sel_].artist,
-                       "专辑详情将在后续版本补全"},
-                      "Tab 返回");
+          Cmd c;
+          c.kind = CmdAlbum;
+          c.id = search_.albums[sel_].id;
+          c.text = search_.albums[sel_].name + " - " + search_.albums[sel_].artist;
+          pushCmd(c);
+          status_ = "加载专辑歌曲...";
+          dirty_ = true;
         }
       }
       break;

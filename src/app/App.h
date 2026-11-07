@@ -70,7 +70,9 @@ class App {
     CmdFm,
     CmdPlay,
     CmdLike,
-    CmdLyric
+    CmdLyric,
+    CmdArtist,
+    CmdAlbum
   };
 
   enum EventKind : uint8_t {

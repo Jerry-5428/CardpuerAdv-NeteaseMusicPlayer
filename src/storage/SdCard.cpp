@@ -5,6 +5,7 @@
 
 #include "AppConfig.h"
 #include "Log.h"
+#include "SdLock.h"
 
 namespace storage {
 namespace {
@@ -16,6 +17,7 @@ bool s_mounted = false;
 }  // namespace
 
 bool mountSd() {
+  initSdLock();
   if (s_mounted && SD.cardType() != CARD_NONE) return true;
 
   pinMode(cfg::PIN_SD_CS, OUTPUT);
@@ -39,6 +41,7 @@ bool sdMounted() { return s_mounted; }
 
 bool ensureDir(const String& path) {
   if (!s_mounted) return false;
+  SdGuard guard;
   if (SD.exists(path.c_str())) return true;
   return SD.mkdir(path.c_str());
 }

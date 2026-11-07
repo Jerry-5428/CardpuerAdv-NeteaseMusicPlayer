@@ -42,6 +42,8 @@ class NetEaseApi {
   bool recommendSongs(std::vector<Track>& out, String& err);
   bool personalFm(std::vector<Track>& out, String& err);
   bool recentSongs(int64_t uid, std::vector<Track>& out, String& err);
+  bool artistSongs(int64_t id, std::vector<Track>& out, String& err);
+  bool albumSongs(int64_t id, std::vector<Track>& out, String& err);
 
  private:
   std::vector<HttpHeader> baseHeaders(bool withCookie) const;

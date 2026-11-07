@@ -9,6 +9,7 @@
 #include "AppConfig.h"
 #include "Log.h"
 #include "SdCard.h"
+#include "SdLock.h"
 #include "util/Crypto.h"
 
 namespace {
@@ -46,6 +47,7 @@ void CookieStore::deriveKey(uint8_t key[32]) const {
 
 bool CookieStore::exists() const {
   if (!storage::sdMounted()) return false;
+  storage::SdGuard guard;
   return SD.exists(cfg::COOKIE_FILE);
 }
 
@@ -56,6 +58,7 @@ bool CookieStore::save(const CookieJar& jar, const AccountInfo& account) {
     LOGW(kTag, "cannot persist cookie: SD not mounted");
     return false;
   }
+  storage::SdGuard guard;
   if (jar.empty()) {
     error_ = "empty cookie jar";
     return false;
@@ -127,6 +130,7 @@ bool CookieStore::load(CookieJar& jar, AccountInfo& account) {
     error_ = "SD not mounted";
     return false;
   }
+  storage::SdGuard guard;
   File f = SD.open(cfg::COOKIE_FILE, FILE_READ);
   if (!f) {
     error_ = "no saved session";
@@ -205,6 +209,7 @@ bool CookieStore::erase() {
     error_ = "SD not mounted";
     return false;
   }
+  storage::SdGuard guard;
   if (SD.exists(cfg::COOKIE_FILE)) SD.remove(cfg::COOKIE_FILE);
   if (SD.exists(kTmpFile)) SD.remove(kTmpFile);
   LOGI(kTag, "saved session erased");

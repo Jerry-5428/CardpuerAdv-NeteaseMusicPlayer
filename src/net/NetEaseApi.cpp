@@ -127,15 +127,22 @@ bool NetEaseApi::eapi(const String& apiPath, const String& json, String& body, S
   opt.maxBody = cfg::HTTP_MAX_RESPONSE;
   opt.collectCookies = collectCookies;
 
-  const HttpResult r = http::request(eapiUrl(apiPath), opt);
-  if (!r.ok) {
-    err = r.error.length() ? r.error : "network error";
-    LOGW(kTag, "eapi %s failed: %s", apiPath.c_str(), err.c_str());
-    return false;
-  }
-  if (r.status != 200) {
-    err = String("HTTP ") + r.status;
-    return false;
+  HttpResult r;
+  // NetEase answers -462 when requests arrive too fast; retry with backoff.
+  for (int attempt = 0; attempt < 3; ++attempt) {
+    r = http::request(eapiUrl(apiPath), opt);
+    if (!r.ok) {
+      err = r.error.length() ? r.error : "network error";
+      LOGW(kTag, "eapi %s failed: %s", apiPath.c_str(), err.c_str());
+      return false;
+    }
+    if (r.status != 200) {
+      err = String("HTTP ") + r.status;
+      return false;
+    }
+    if (r.body.indexOf("-462") < 0 || attempt == 2) break;
+    LOGW(kTag, "eapi %s hit -462, retry %d", apiPath.c_str(), attempt + 1);
+    delay(1200 * (attempt + 1));
   }
   body = r.body;
   if (collectCookies && setCookies) *setCookies = r.setCookies;
@@ -153,15 +160,21 @@ bool NetEaseApi::plainForm(const String& apiPath, const String& form, String& bo
   opt.maxBody = cfg::HTTP_MAX_RESPONSE;
 
   const String url = String("https://") + cfg::API_HOST + apiPath;
-  const HttpResult r = http::request(url, opt);
-  if (!r.ok) {
-    err = r.error.length() ? r.error : "network error";
-    LOGW(kTag, "form %s failed: %s", apiPath.c_str(), err.c_str());
-    return false;
-  }
-  if (r.status != 200) {
-    err = String("HTTP ") + r.status;
-    return false;
+  HttpResult r;
+  for (int attempt = 0; attempt < 3; ++attempt) {
+    r = http::request(url, opt);
+    if (!r.ok) {
+      err = r.error.length() ? r.error : "network error";
+      LOGW(kTag, "form %s failed: %s", apiPath.c_str(), err.c_str());
+      return false;
+    }
+    if (r.status != 200) {
+      err = String("HTTP ") + r.status;
+      return false;
+    }
+    if (r.body.indexOf("-462") < 0 || attempt == 2) break;
+    LOGW(kTag, "form %s hit -462, retry %d", apiPath.c_str(), attempt + 1);
+    delay(1200 * (attempt + 1));
   }
   body = r.body;
   return true;
@@ -712,6 +725,77 @@ bool NetEaseApi::recentSongs(int64_t uid, std::vector<Track>& out, String& err) 
   for (JsonObject item : doc["allData"].as<JsonArray>()) {
     JsonObject s = item["song"];
     if (!s.isNull()) out.push_back(parseSong(s));
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Artist / album detail (plain form endpoints, no EAPI risk control)
+// ---------------------------------------------------------------------------
+
+bool NetEaseApi::artistSongs(int64_t id, std::vector<Track>& out, String& err) {
+  out.clear();
+  const String form = String("id=") + id + "&offset=0&limit=50&order=time";
+  String body;
+  if (!plainForm("/api/v1/artist/songs", form, body, err)) return false;
+  if (body.length() > 200 * 1024) {
+    err = "歌手歌曲响应过大";
+    return false;
+  }
+
+  DynamicJsonDocument filter(2048);
+  filter["code"] = true;
+  addSongFilter(filter["songs"][0]);
+
+  DynamicJsonDocument doc(32768);
+  if (deserializeJson(doc, body, DeserializationOption::Filter(filter))) {
+    err = "解析失败";
+    return false;
+  }
+  if (jsonCode(doc) != 200) {
+    err = String("code ") + jsonCode(doc);
+    return false;
+  }
+  for (JsonObject s : doc["songs"].as<JsonArray>()) {
+    Track t = parseSong(s);
+    if (t.id) out.push_back(t);
+  }
+  if (out.empty()) {
+    err = "该歌手暂无歌曲";
+    return false;
+  }
+  return true;
+}
+
+bool NetEaseApi::albumSongs(int64_t id, std::vector<Track>& out, String& err) {
+  out.clear();
+  String body;
+  if (!plainForm(String("/api/v1/album/") + id, "", body, err)) return false;
+  if (body.length() > 220 * 1024) {
+    err = "专辑响应过大";
+    return false;
+  }
+
+  DynamicJsonDocument filter(2048);
+  filter["code"] = true;
+  addSongFilter(filter["songs"][0]);
+
+  DynamicJsonDocument doc(32768);
+  if (deserializeJson(doc, body, DeserializationOption::Filter(filter))) {
+    err = "解析失败";
+    return false;
+  }
+  if (jsonCode(doc) != 200) {
+    err = String("code ") + jsonCode(doc);
+    return false;
+  }
+  for (JsonObject s : doc["songs"].as<JsonArray>()) {
+    Track t = parseSong(s);
+    if (t.id) out.push_back(t);
+  }
+  if (out.empty()) {
+    err = "该专辑暂无歌曲";
+    return false;
   }
   return true;
 }

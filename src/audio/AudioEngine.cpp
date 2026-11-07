@@ -10,6 +10,7 @@
 #include "AppConfig.h"
 #include "Log.h"
 #include "storage/SdCard.h"
+#include "storage/SdLock.h"
 
 namespace {
 constexpr const char* kTag = "AUDIO";
@@ -192,6 +193,7 @@ void AudioEngine::ensureCacheDir() {
 }
 
 size_t AudioEngine::fileSize(const String& path) {
+  storage::SdGuard guard;
   File f = SD.open(path);
   if (!f) return 0;
   const size_t s = f.size();
@@ -200,6 +202,7 @@ size_t AudioEngine::fileSize(const String& path) {
 }
 
 void AudioEngine::pruneCache(const String& keep) {
+  storage::SdGuard guard;
   File dir = SD.open(kCacheDir);
   if (!dir) return;
 
@@ -227,8 +230,12 @@ bool AudioEngine::downloadToSd(const String& url, const String& finalPath) {
   pruneCache(finalPath);
 
   const String part = finalPath + ".part";
-  SD.remove(part);
-  File out = SD.open(part, FILE_WRITE);
+  File out;
+  {
+    storage::SdGuard guard;
+    SD.remove(part);
+    out = SD.open(part, FILE_WRITE);
+  }
   if (!out) {
     setError("SD 卡写入失败");
     return false;
@@ -238,8 +245,11 @@ bool AudioEngine::downloadToSd(const String& url, const String& finalPath) {
   source_.setCookie(cookie_);
   if (!source_.open(url.c_str())) {
     setError(source_.lastError().length() ? source_.lastError() : "音频连接失败");
-    out.close();
-    SD.remove(part);
+    {
+      storage::SdGuard guard;
+      out.close();
+      SD.remove(part);
+    }
     return false;
   }
 
@@ -250,8 +260,11 @@ bool AudioEngine::downloadToSd(const String& url, const String& finalPath) {
   if (!buf) {
     setError("内存不足");
     source_.close();
-    out.close();
-    SD.remove(part);
+    {
+      storage::SdGuard guard;
+      out.close();
+      SD.remove(part);
+    }
     return false;
   }
 
@@ -266,7 +279,12 @@ bool AudioEngine::downloadToSd(const String& url, const String& finalPath) {
     }
     const uint32_t n = source_.read(buf, kDownloadChunk);
     if (n > 0) {
-      if (out.write(buf, n) != n) {
+      size_t written = 0;
+      {
+        storage::SdGuard guard;
+        written = out.write(buf, n);
+      }
+      if (written != n) {
         why = "SD 卡写入失败";
         ok = false;
         break;
@@ -292,19 +310,26 @@ bool AudioEngine::downloadToSd(const String& url, const String& finalPath) {
   }
 
   source_.close();
-  out.close();
+  {
+    storage::SdGuard guard;
+    out.close();
+  }
   free(buf);
 
   if (!ok) {
+    storage::SdGuard guard;
     SD.remove(part);
     setError(why.length() ? why : "下载失败");
     return false;
   }
 
-  SD.remove(finalPath);
-  if (!SD.rename(part, finalPath)) {
-    setError("缓存文件保存失败");
-    return false;
+  {
+    storage::SdGuard guard;
+    SD.remove(finalPath);
+    if (!SD.rename(part, finalPath)) {
+      setError("缓存文件保存失败");
+      return false;
+    }
   }
   LOGI(kTag, "cached %s (%u bytes)", finalPath.c_str(), (unsigned)dlBytes_.load());
   return true;
@@ -314,7 +339,11 @@ bool AudioEngine::playFromSd(const String& url, const Track& track) {
   ensureCacheDir();
   const String path = cachePath(track.id);
 
-  bool cached = SD.exists(path) && fileSize(path) > 32 * 1024;
+  bool cached = false;
+  {
+    storage::SdGuard guard;
+    cached = SD.exists(path) && fileSize(path) > 32 * 1024;
+  }
   if (!cached) {
     stage_ = Stage::Downloading;
     dlBytes_ = 0;
