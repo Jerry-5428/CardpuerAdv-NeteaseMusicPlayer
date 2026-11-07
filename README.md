@@ -95,7 +95,24 @@ pio run -t upload
 - 仅解码 MP3；极高/较高音质若返回 FLAC 会自动回落标准音质
 - 流式播放依赖网络质量；弱网建议使用 SD 缓存模式
 
+## 接口可行性验证（2026-11-07）
+
+使用与固件相同的 EAPI 算法（AES-128-ECB + MD5 digest）实测：
+
+| 接口 | 结果 |
+| --- | --- |
+| `/api/login/qrcode/unikey` | 200，返回 unikey |
+| `/api/cloudsearch/pc`（歌曲/歌手/歌单） | 200，字段解析正常 |
+| `/api/song/lyric` | 200，LRC 正常 |
+| `/api/v6/playlist/detail` | 200，200 首曲目 |
+| `/api/v1/artist/songs` | 200，歌手歌曲列表正常 |
+| `/api/v1/album/<id>` | 200，专辑歌曲正常 |
+| `/api/song/enhance/player/url/v1`（未登录） | 200，url 为空（需 MUSIC_U） |
+| TLS 证书链 | `*.music.163.com` / `*.music.126.net` 根证书为 DigiCert Global Root G2，已内嵌 |
+
+高频连续请求会偶发 `-462` 风控，固件已实现 3 次退避重试。
+
 ## 状态说明
 
 - 已完成：全部功能代码、PlatformIO 编译通过（RAM ≈ 17.6%，Flash ≈ 48.6%）
-- 待实机验收：扫码登录、音频解码出声、CDN 证书链、SD 并发、长时间播放稳定性
+- 待实机验收：扫码登录、音频解码出声、实机 TLS 握手、SD 并发、长时间播放稳定性
