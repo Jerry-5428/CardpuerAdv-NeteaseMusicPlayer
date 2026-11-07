@@ -15,6 +15,9 @@ class Settings {
     uint8_t volume = 130;  // 0..255
     uint16_t ringKb = 48;
     PlayMode playMode = PlayMode::LoopAll;
+    // true  = pre-download the track to SD, then decode locally
+    // false = decode the HTTPS stream directly
+    bool sdCache = true;
   };
 
   bool begin();

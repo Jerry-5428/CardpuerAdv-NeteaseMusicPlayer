@@ -21,6 +21,13 @@
         "examples/*/*.ino"
     ],
     "build": {
-        "libLDFMode": "deep"
+        "libLDFMode": "deep",
+        "srcFilter": [
+            "+<*>",
+            "-<AudioOutputI2S.cpp>",
+            "-<AudioOutputI2SNoDAC.cpp>",
+            "-<AudioOutputPDM.cpp>",
+            "-<AudioOutputSPDIF.cpp>"
+        ]
     }
 }

@@ -13,7 +13,7 @@
 
 namespace {
 constexpr const char* kTag = "AUDIO";
-constexpr const char* kCacheDir = "/sd/netease/cache";
+constexpr const char* kCacheDir = "/netease/cache";
 constexpr size_t kDownloadChunk = 4096;
 constexpr uint32_t kStallTimeoutMs = 20000;
 constexpr size_t kMaxCacheFiles = 4;
@@ -145,10 +145,10 @@ void AudioEngine::run() {
       source_.setCookie(cookie_);
 
       bool ok = false;
-      if (storage::sdMounted()) {
+      if (sourceMode_ == SourceMode::SdCache && storage::sdMounted()) {
         ok = playFromSd(url, track);
       } else {
-        LOGW(kTag, "no SD card, falling back to direct streaming");
+        if (sourceMode_ == SourceMode::SdCache) LOGW(kTag, "no SD card, using direct streaming");
         ok = playFromStream(url);
       }
 
@@ -187,7 +187,7 @@ String AudioEngine::cachePath(int64_t id) {
 }
 
 void AudioEngine::ensureCacheDir() {
-  storage::ensureDir("/sd/netease");
+  storage::ensureDir("/netease");
   storage::ensureDir(kCacheDir);
 }
 
@@ -259,6 +259,11 @@ bool AudioEngine::downloadToSd(const String& url, const String& finalPath) {
   String why;
   uint32_t lastData = millis();
   while (!source_.eof()) {
+    if (stopRequest_.exchange(false)) {
+      why = "已取消";
+      ok = false;
+      break;
+    }
     const uint32_t n = source_.read(buf, kDownloadChunk);
     if (n > 0) {
       if (out.write(buf, n) != n) {

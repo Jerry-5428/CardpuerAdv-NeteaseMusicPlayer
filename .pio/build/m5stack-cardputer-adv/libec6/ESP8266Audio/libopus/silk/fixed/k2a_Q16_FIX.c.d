@@ -1,0 +1,31 @@
+.pio/build/m5stack-cardputer-adv/libec6/ESP8266Audio/libopus/silk/fixed/k2a_Q16_FIX.c.o: \
+ lib/ESP8266Audio/src/libopus/silk/fixed/k2a_Q16_FIX.c \
+ lib/ESP8266Audio/src/libopus/silk/fixed/config.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../../include/config.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/SigProc_FIX.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../SigProc_FIX.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../typedef.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../opus_types.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../../include/opus_types.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../opus_defines.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../../include/opus_defines.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../../include/opus_types.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../resampler_structs.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../macros.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../config.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../../include/config.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../arch.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../../celt/arch.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../../celt/opus_types.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../../celt/../include/opus_types.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../../celt/opus_defines.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../../celt/../include/opus_defines.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../../celt/fixed_generic.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../ecintrin.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../../celt/ecintrin.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../../celt/arch.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../cpu_support.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../../celt/cpu_support.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../Inlines.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../MacroCount.h \
+ lib/ESP8266Audio/src/libopus/silk/fixed/../MacroDebug.h

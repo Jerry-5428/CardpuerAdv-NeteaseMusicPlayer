@@ -29,6 +29,7 @@ void Settings::load() {
   data_.ringKb = (ring < cfg::AUDIO_RING_MIN / 1024) ? cfg::AUDIO_RING_MIN / 1024 : ring;
   if (data_.ringKb > cfg::AUDIO_RING_MAX / 1024) data_.ringKb = cfg::AUDIO_RING_MAX / 1024;
   data_.playMode = static_cast<PlayMode>(s_prefs.getUChar("playmode", 1));
+  data_.sdCache = s_prefs.getBool("sdcache", true);
 }
 
 void Settings::store() {
@@ -38,6 +39,7 @@ void Settings::store() {
   s_prefs.putUChar("volume", data_.volume);
   s_prefs.putUShort("ringkb", data_.ringKb);
   s_prefs.putUChar("playmode", static_cast<uint8_t>(data_.playMode));
+  s_prefs.putBool("sdcache", data_.sdCache);
 }
 
 void Settings::saveWifi(const String& ssid, const String& pass) {

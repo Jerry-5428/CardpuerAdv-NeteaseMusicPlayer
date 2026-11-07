@@ -50,6 +50,18 @@ HttpAudioSource::~HttpAudioSource() { close(); }
 
 bool HttpAudioSource::open(const char* url) {
   close();
+
+  // A previous download task may still be finishing a blocking socket read.
+  // Never start a new session while it is alive: it would share abort_/ring_.
+  if (running_.load()) {
+    for (int i = 0; i < 500 && running_.load(); ++i) vTaskDelay(pdMS_TO_TICKS(10));
+    if (running_.load()) {
+      error_ = "audio source busy";
+      failed_ = true;
+      return false;
+    }
+  }
+
   url_ = url ? url : "";
   error_ = "";
   abort_ = false;
@@ -136,15 +148,31 @@ uint32_t HttpAudioSource::readNonBlock(void* data, uint32_t len) {
 
 bool HttpAudioSource::close() {
   abort_ = true;
+  bool stopped = true;
   if (task_) {
-    for (int i = 0; i < 300 && running_.load(); ++i) vTaskDelay(pdMS_TO_TICKS(10));
+    stopped = false;
+    for (int i = 0; i < 500 && running_.load(); ++i) {
+      vTaskDelay(pdMS_TO_TICKS(10));
+      if (!running_.load()) {
+        stopped = true;
+        break;
+      }
+    }
     task_ = nullptr;
   }
   if (ring_) {
-    vRingbufferDelete(ring_);
+    if (stopped) {
+      vRingbufferDelete(ring_);
+    } else {
+      // The download task is still blocked in a socket read.  Do NOT free the
+      // ring under it: the feed path only touches it when not aborted, and
+      // the task ends shortly.  Leaking one ring is far better than a
+      // use-after-free; leaving ring_ null makes the next open() start clean.
+      LOGW(kTag, "download task still running, ring buffer orphaned");
+    }
     ring_ = nullptr;
   }
-  running_ = false;
+  if (stopped) running_ = false;
   buffered_ = 0;
   return true;
 }

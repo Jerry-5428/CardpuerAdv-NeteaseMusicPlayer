@@ -303,4 +303,8 @@
  lib/M5Unified/src/utility/imu/../I2C_Class.hpp \
  lib/M5Unified/src/utility/IOExpander_Base.hpp \
  src/audio/HttpAudioSource.h lib/ESP8266Audio/src/AudioFileSource.h \
- src/model/Types.h include/AppConfig.h include/Log.h
+ src/model/Types.h lib/ESP8266Audio/src/AudioFileSourceFS.h \
+ /root/.platformio/packages/framework-arduinoespressif32/libraries/FS/src/FS.h \
+ /root/.platformio/packages/framework-arduinoespressif32/libraries/SD/src/SD.h \
+ /root/.platformio/packages/framework-arduinoespressif32/libraries/SD/src/sd_defines.h \
+ include/AppConfig.h include/Log.h src/storage/SdCard.h

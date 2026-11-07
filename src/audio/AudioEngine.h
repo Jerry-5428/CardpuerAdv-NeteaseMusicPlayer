@@ -26,6 +26,11 @@ class AudioFileSourceFS;
 class AudioEngine {
  public:
   enum class Stage : uint8_t { Idle, Downloading, Playing, Paused, Failed };
+  // Playback source, switchable in Settings (persisted in NVS).
+  enum class SourceMode : uint8_t { Stream = 0, SdCache = 1 };
+
+  void setSourceMode(SourceMode mode) { sourceMode_ = mode; }
+  SourceMode sourceMode() const { return sourceMode_; }
 
   bool begin(uint8_t volume, size_t ringBytes);
   bool play(const String& url, const Track& track);
@@ -93,4 +98,5 @@ class AudioEngine {
   String error_;
   size_t ringBytes_ = 48 * 1024;
   uint8_t volume_ = 130;
+  SourceMode sourceMode_ = SourceMode::SdCache;
 };

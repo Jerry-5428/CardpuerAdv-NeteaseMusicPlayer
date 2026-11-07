@@ -47,7 +47,7 @@ String joinArtists(JsonArray ar) {
 
 Track parseSong(JsonObject s) {
   Track t;
-  t.id = s["id"] | 0;
+  t.id = s["id"].as<int64_t>();
   t.name = String(s["name"] | "");
   JsonArray ar = s["ar"].as<JsonArray>();
   if (ar.isNull()) ar = s["artists"].as<JsonArray>();
@@ -105,7 +105,7 @@ String NetEaseApi::eapiUrl(const String& apiPath) const {
 }
 
 String NetEaseApi::headerJson() const {
-  StaticJsonDocument<256> h;
+  StaticJsonDocument<512> h;
   h["os"] = "pc";
   h["appver"] = "8.9.70";
   h["osver"] = "";
@@ -172,7 +172,7 @@ bool NetEaseApi::plainForm(const String& apiPath, const String& form, String& bo
 // ---------------------------------------------------------------------------
 
 bool NetEaseApi::qrKey(String& unikey, String& err) {
-  StaticJsonDocument<256> d;
+  StaticJsonDocument<512> d;
   d["type"] = 1;
   d["header"] = headerJson();
   String json;
@@ -199,7 +199,7 @@ bool NetEaseApi::qrKey(String& unikey, String& err) {
 }
 
 int NetEaseApi::qrCheck(const String& unikey, std::vector<String>& setCookies, String& err) {
-  StaticJsonDocument<256> d;
+  StaticJsonDocument<512> d;
   d["key"] = unikey;
   d["type"] = 1;
   d["header"] = headerJson();
@@ -219,7 +219,7 @@ int NetEaseApi::qrCheck(const String& unikey, std::vector<String>& setCookies, S
 }
 
 bool NetEaseApi::account(AccountInfo& out, String& err) {
-  StaticJsonDocument<256> d;
+  StaticJsonDocument<512> d;
   d["header"] = headerJson();
   String json;
   serializeJson(d, json);
@@ -238,11 +238,11 @@ bool NetEaseApi::account(AccountInfo& out, String& err) {
   }
   JsonObject acct = doc["account"];
   JsonObject prof = doc["profile"];
-  if (acct.isNull() || (acct["id"] | 0) == 0) {
+  if (acct.isNull() || (acct["id"].as<int64_t>()) == 0) {
     err = "未登录";
     return false;
   }
-  out.uid = acct["id"] | 0;
+  out.uid = acct["id"].as<int64_t>();
   out.nickname = String(prof["nickname"] | "");
   out.valid = true;
   return true;
@@ -257,7 +257,7 @@ bool NetEaseApi::search(const String& keyword, int type, int limit, int offset,
   out = SearchResult();
   out.keyword = keyword;
 
-  StaticJsonDocument<384> d;
+  StaticJsonDocument<768> d;
   d["s"] = keyword;
   d["type"] = type;
   d["limit"] = limit;
@@ -275,6 +275,7 @@ bool NetEaseApi::search(const String& keyword, int type, int limit, int offset,
   }
 
   DynamicJsonDocument filter(4096);
+  filter["code"] = true;
   if (type == 1) {
     addSongFilter(filter["result"]["songs"][0]);
   } else if (type == 100) {
@@ -316,7 +317,7 @@ bool NetEaseApi::search(const String& keyword, int type, int limit, int offset,
   for (JsonObject a : artists) {
     if (out.artists.size() >= cfg::MAX_SEARCH_RESULTS) break;
     ArtistInfo info;
-    info.id = a["id"] | 0;
+    info.id = a["id"].as<int64_t>();
     info.name = String(a["name"] | "");
     info.albumCount = a["albumSize"] | 0;
     info.songCount = a["musicSize"] | 0;
@@ -326,7 +327,7 @@ bool NetEaseApi::search(const String& keyword, int type, int limit, int offset,
   for (JsonObject a : albums) {
     if (out.albums.size() >= cfg::MAX_SEARCH_RESULTS) break;
     AlbumInfo info;
-    info.id = a["id"] | 0;
+    info.id = a["id"].as<int64_t>();
     info.name = String(a["name"] | "");
     info.artist = String(a["artist"]["name"] | "");
     info.songCount = a["size"] | 0;
@@ -336,7 +337,7 @@ bool NetEaseApi::search(const String& keyword, int type, int limit, int offset,
   for (JsonObject p : playlists) {
     if (out.playlists.size() >= cfg::MAX_SEARCH_RESULTS) break;
     PlaylistInfo info;
-    info.id = p["id"] | 0;
+    info.id = p["id"].as<int64_t>();
     info.name = String(p["name"] | "");
     info.creator = String(p["creator"]["nickname"] | "");
     info.trackCount = p["trackCount"] | 0;
@@ -475,6 +476,7 @@ bool NetEaseApi::playlistDetail(int64_t id, PlaylistInfo& info, std::vector<Trac
   }
 
   DynamicJsonDocument filter(1024);
+  filter["code"] = true;
   JsonObject p = filter["playlist"].to<JsonObject>();
   p["id"] = true;
   p["name"] = true;
@@ -504,7 +506,7 @@ bool NetEaseApi::playlistDetail(int64_t id, PlaylistInfo& info, std::vector<Trac
   std::vector<int64_t> ids;
   ids.reserve(100);
   for (JsonObject t : pl["trackIds"].as<JsonArray>()) {
-    ids.push_back(t["id"] | 0);
+    ids.push_back(t["id"].as<int64_t>());
     if (ids.size() >= 100) break;
   }
   if (ids.empty()) {
@@ -532,7 +534,7 @@ bool NetEaseApi::playlistDetail(int64_t id, PlaylistInfo& info, std::vector<Trac
 
 bool NetEaseApi::userPlaylists(int64_t uid, std::vector<PlaylistInfo>& out, String& err) {
   out.clear();
-  StaticJsonDocument<256> d;
+  StaticJsonDocument<512> d;
   d["uid"] = uid;
   d["limit"] = 50;
   d["offset"] = 0;
@@ -549,6 +551,7 @@ bool NetEaseApi::userPlaylists(int64_t uid, std::vector<PlaylistInfo>& out, Stri
   }
 
   DynamicJsonDocument filter(1024);
+  filter["code"] = true;
   JsonObject p = filter["playlist"][0].to<JsonObject>();
   p["id"] = true;
   p["name"] = true;
@@ -568,7 +571,7 @@ bool NetEaseApi::userPlaylists(int64_t uid, std::vector<PlaylistInfo>& out, Stri
   }
   for (JsonObject pl : doc["playlist"].as<JsonArray>()) {
     PlaylistInfo info;
-    info.id = pl["id"] | 0;
+    info.id = pl["id"].as<int64_t>();
     info.name = String(pl["name"] | "");
     info.creator = String(pl["creator"]["nickname"] | "");
     info.trackCount = pl["trackCount"] | 0;
@@ -627,7 +630,7 @@ bool NetEaseApi::likeSong(int64_t id, int64_t uid, bool like, String& err) {
 
 bool NetEaseApi::recommendSongs(std::vector<Track>& out, String& err) {
   out.clear();
-  StaticJsonDocument<256> d;
+  StaticJsonDocument<512> d;
   d["limit"] = 30;
   d["header"] = headerJson();
   String json;
@@ -637,6 +640,7 @@ bool NetEaseApi::recommendSongs(std::vector<Track>& out, String& err) {
   if (!eapi("/api/v3/discovery/recommend/songs", json, body, err)) return false;
 
   DynamicJsonDocument filter(2048);
+  filter["code"] = true;
   addSongFilter(filter["data"]["dailySongs"][0]);
   DynamicJsonDocument doc(32768);
   if (deserializeJson(doc, body, DeserializationOption::Filter(filter))) {
@@ -655,7 +659,7 @@ bool NetEaseApi::recommendSongs(std::vector<Track>& out, String& err) {
 
 bool NetEaseApi::personalFm(std::vector<Track>& out, String& err) {
   out.clear();
-  StaticJsonDocument<256> d;
+  StaticJsonDocument<512> d;
   d["header"] = headerJson();
   String json;
   serializeJson(d, json);
@@ -664,6 +668,7 @@ bool NetEaseApi::personalFm(std::vector<Track>& out, String& err) {
   if (!eapi("/api/v1/radio/get", json, body, err)) return false;
 
   DynamicJsonDocument filter(2048);
+  filter["code"] = true;
   addSongFilter(filter["data"][0]);
   DynamicJsonDocument doc(32768);
   if (deserializeJson(doc, body, DeserializationOption::Filter(filter))) {
@@ -682,7 +687,7 @@ bool NetEaseApi::personalFm(std::vector<Track>& out, String& err) {
 
 bool NetEaseApi::recentSongs(int64_t uid, std::vector<Track>& out, String& err) {
   out.clear();
-  StaticJsonDocument<256> d;
+  StaticJsonDocument<512> d;
   d["uid"] = uid;
   d["type"] = 1;
   d["header"] = headerJson();
@@ -693,6 +698,7 @@ bool NetEaseApi::recentSongs(int64_t uid, std::vector<Track>& out, String& err) 
   if (!eapi("/api/v1/play/record", json, body, err)) return false;
 
   DynamicJsonDocument filter(2048);
+  filter["code"] = true;
   addSongFilter(filter["allData"][0]["song"]);
   DynamicJsonDocument doc(32768);
   if (deserializeJson(doc, body, DeserializationOption::Filter(filter))) {
