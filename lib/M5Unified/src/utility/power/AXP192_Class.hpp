@@ -1,0 +1,135 @@
+// Copyright (c) M5Stack. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
+#ifndef __M5_AXP192_CLASS_H__
+#define __M5_AXP192_CLASS_H__
+
+#include "../I2C_Class.hpp"
+
+namespace m5
+{
+  class AXP192_Class : public I2C_Device
+  {
+  public:
+
+    static constexpr std::uint8_t DEFAULT_ADDRESS = 0x34;
+
+    AXP192_Class(std::uint8_t i2c_addr = DEFAULT_ADDRESS, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C)
+    : I2C_Device ( i2c_addr, freq, i2c )
+    {}
+
+    bool begin(void);
+
+    /// Get the remaining battery power.
+    /// @return 0-100 level. -1 on I2C failure, but the value can also go slightly
+    /// negative while a nearly empty battery is being charged, so -1 is ambiguous:
+    /// use getBatteryLevel(int8_t*) where the difference matters.
+    std::int8_t getBatteryLevel(void);
+    /// @return false on I2C failure or a null pointer (level is left untouched).
+    /// The level may be slightly negative while a nearly empty battery is being charged.
+    bool getBatteryLevel(std::int8_t* level);
+
+    /// set battery charge enable.
+    /// @param enable true=enable / false=disable
+    /// @return false on I2C failure.
+    bool setBatteryCharge(bool enable);
+
+    /// set battery charge current
+    /// @param max_mA milli ampere. (100 - 1320).
+    /// @param applied_mA optional. receives the step that was applied.
+    /// @return false on I2C failure. applied_mA is left untouched then.
+    bool setChargeCurrent(std::uint16_t max_mA, std::uint16_t* applied_mA = nullptr);
+
+    /// set battery charge voltage
+    /// @param max_mV milli volt. (4100 - 4360).
+    /// set the constant-voltage charge target.
+    /// @param max_mV the highest step at or below this value is selected.
+    /// Supported steps are 4100 / 4150 / 4200 / 4360 mV; a request under the
+    /// lowest step selects that step, and one above the highest selects the
+    /// highest.
+    /// @param applied_mV optional. receives the step that was applied.
+    /// @return false on I2C failure. applied_mV is left untouched then.
+    bool setChargeVoltage(std::uint16_t max_mV, std::uint16_t* applied_mV = nullptr);
+
+    /// Get whether the battery is currently charging or not.
+    bool isCharging(void);
+
+    /// read REG00H bit2 (battery current direction : 1 = into the battery) with I2C error reporting.
+    /// @return false on I2C failure.
+    /// @note isCharging() folds a failed read into false; use this where the
+    /// difference between "not charging" and "could not read" matters.
+    bool readChargeActive(bool* charging);
+
+    /// read the charger enable (REG33H bit7) with I2C error reporting.
+    /// @return false on I2C failure.
+    bool getBatteryCharge(bool* enabled);
+
+    inline void setDCDC1(int voltage) { _set_DCDC(0, voltage); }
+    inline void setDCDC2(int voltage) { _set_DCDC(1, voltage); }
+    inline void setDCDC3(int voltage) { _set_DCDC(2, voltage); }
+
+    /// set LDOio0 voltage
+    /// @param voltage milli volt. (0 - 3300).
+    inline bool setLDO0(int voltage) { return _set_LDO(0, voltage); }
+
+    /// set LDO2 voltage
+    /// @param voltage milli volt. (0 - 3300).
+    inline bool setLDO2(int voltage) { return _set_LDO(2, voltage); }
+
+    /// set LDO3 voltage
+    /// @param voltage milli volt. (0 - 3300).
+    inline bool setLDO3(int voltage) { return _set_LDO(3, voltage); }
+
+    inline bool setGPIO(uint8_t gpio_num, bool state) { return (gpio_num < 3) ? _set_GPIO0_2(gpio_num, state) : _set_GPIO3_4(gpio_num - 3, state); }
+    inline bool setGPIO0(bool state) { return _set_GPIO0_2(0, state); }
+    inline bool setGPIO1(bool state) { return _set_GPIO0_2(1, state); }
+    inline bool setGPIO2(bool state) { return _set_GPIO0_2(2, state); }
+    inline bool setGPIO3(bool state) { return _set_GPIO3_4(0, state); }
+    inline bool setGPIO4(bool state) { return _set_GPIO3_4(1, state); }
+
+    void powerOff(void);
+
+    void setAdcState(bool enable);
+    void setAdcRate( std::uint8_t rate );
+
+    /// @return false on I2C failure.
+    bool setEXTEN(bool enable);
+    void setBACKUP(bool enable);
+
+    bool isACIN(void);
+    bool isVBUS(void);
+    bool getBatState(void);
+    bool getEXTEN(void);
+
+    float getBatteryVoltage(void);
+    float getBatteryDischargeCurrent(void);
+    float getBatteryChargeCurrent(void);
+    float getBatteryPower(void);
+    float getACINVoltage(void);
+    float getACINCurrent(void);
+    float getVBUSVoltage(void);
+    float getVBUSCurrent(void);
+    float getAPSVoltage(void);
+    float getInternalTemperature(void);
+
+    std::uint8_t getPekPress(void);
+
+    [[deprecated("use getACINVoltage()")]]
+    inline float getACINVolatge(void) { return getACINVoltage(); }
+
+  private:
+    std::size_t readRegister12(std::uint8_t addr);
+    std::size_t readRegister13(std::uint8_t addr);
+    std::size_t readRegister16(std::uint8_t addr);
+    std::size_t readRegister24(std::uint8_t addr);
+    std::size_t readRegister32(std::uint8_t addr);
+
+    void _set_DCDC(std::uint8_t num, int voltage);
+    bool _set_LDO(std::uint8_t num, int voltage);
+    void _set_LDO2_LDO3(std::uint8_t num, int voltage);
+    bool _set_GPIO0_2(std::uint8_t num, bool state);
+    bool _set_GPIO3_4(std::uint8_t num, bool state);
+  };
+}
+
+#endif
