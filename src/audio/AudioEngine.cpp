@@ -1,13 +1,23 @@
 #include "AudioEngine.h"
 
+#include <AudioFileSourceFS.h>
 #include <M5Unified.h>
+#include <SD.h>
+
+#include <algorithm>
+#include <vector>
 
 #include "AppConfig.h"
 #include "Log.h"
+#include "storage/SdCard.h"
 
 namespace {
 constexpr const char* kTag = "AUDIO";
-}
+constexpr const char* kCacheDir = "/sd/netease/cache";
+constexpr size_t kDownloadChunk = 4096;
+constexpr uint32_t kStallTimeoutMs = 20000;
+constexpr size_t kMaxCacheFiles = 4;
+}  // namespace
 
 bool AudioEngine::begin(uint8_t volume, size_t ringBytes) {
   ringBytes_ = ringBytes;
@@ -61,6 +71,14 @@ void AudioEngine::togglePause() {
   paused_ = !paused_;
 }
 
+uint8_t AudioEngine::downloadPercent() const {
+  const uint32_t total = dlTotal_.load();
+  if (!total) return 0;
+  const uint32_t done = dlBytes_.load();
+  if (done >= total) return 100;
+  return static_cast<uint8_t>(static_cast<uint64_t>(done) * 100ULL / total);
+}
+
 uint32_t AudioEngine::positionMs() const {
   const uint32_t rate = output_.getRate();
   if (rate == 0) return 0;
@@ -92,6 +110,11 @@ void AudioEngine::teardown() {
   if (mp3_.isRunning()) mp3_.stop();
   output_.stop();
   source_.close();
+  if (fileSource_) {
+    fileSource_->close();
+    delete fileSource_;
+    fileSource_ = nullptr;
+  }
   playing_ = false;
   paused_ = false;
 }
@@ -102,6 +125,7 @@ void AudioEngine::run() {
   for (;;) {
     if (stopRequest_.exchange(false)) {
       teardown();
+      stage_ = Stage::Idle;
       ended_ = false;
     }
 
@@ -120,30 +144,209 @@ void AudioEngine::run() {
       source_.setBufferBytes(ringBytes_);
       source_.setCookie(cookie_);
 
-      LOGI(kTag, "opening stream for %lld (%ukbps target)", (long long)track.id,
-           (unsigned)(durationMs_ / 1000));
-      if (!source_.open(url.c_str())) {
-        setError(source_.lastError());
+      bool ok = false;
+      if (storage::sdMounted()) {
+        ok = playFromSd(url, track);
+      } else {
+        LOGW(kTag, "no SD card, falling back to direct streaming");
+        ok = playFromStream(url);
+      }
+
+      if (!ok) {
         ended_ = true;
-      } else if (!mp3_.begin(&source_, &output_)) {
-        setError("MP3 decoder init failed");
-        source_.close();
-        ended_ = true;
+        stage_ = Stage::Failed;
       } else {
         playing_ = true;
         paused_ = false;
+        stage_ = Stage::Playing;
       }
     }
 
-    if (playing_ && !paused_) {
-      if (!mp3_.loop()) {
-        const String err = source_.lastError();
-        teardown();
-        if (source_.failed() && err.length()) setError(err);
-        ended_ = true;
+    if (playing_) {
+      stage_ = paused_ ? Stage::Paused : Stage::Playing;
+      if (!paused_) {
+        if (!mp3_.loop()) {
+          const bool netFailed = source_.failed();
+          const String err = source_.lastError();
+          teardown();
+          if (netFailed && err.length()) setError(err);
+          ended_ = true;
+          stage_ = Stage::Idle;
+        }
+      } else {
+        vTaskDelay(pdMS_TO_TICKS(5));
       }
     } else {
       vTaskDelay(pdMS_TO_TICKS(5));
     }
   }
+}
+
+String AudioEngine::cachePath(int64_t id) {
+  return String(kCacheDir) + "/" + String((long long)id) + ".mp3";
+}
+
+void AudioEngine::ensureCacheDir() {
+  storage::ensureDir("/sd/netease");
+  storage::ensureDir(kCacheDir);
+}
+
+size_t AudioEngine::fileSize(const String& path) {
+  File f = SD.open(path);
+  if (!f) return 0;
+  const size_t s = f.size();
+  f.close();
+  return s;
+}
+
+void AudioEngine::pruneCache(const String& keep) {
+  File dir = SD.open(kCacheDir);
+  if (!dir) return;
+
+  std::vector<String> files;
+  for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
+    if (!f.isDirectory()) files.push_back(f.path());
+    f.close();
+  }
+  dir.close();
+  size_t count = files.size();
+  if (count <= kMaxCacheFiles) return;
+
+  for (const String& p : files) {
+    if (count <= kMaxCacheFiles) break;
+    if (p == keep) continue;
+    if (SD.remove(p)) {
+      --count;
+      LOGI(kTag, "cache pruned: %s", p.c_str());
+    }
+  }
+}
+
+bool AudioEngine::downloadToSd(const String& url, const String& finalPath) {
+  ensureCacheDir();
+  pruneCache(finalPath);
+
+  const String part = finalPath + ".part";
+  SD.remove(part);
+  File out = SD.open(part, FILE_WRITE);
+  if (!out) {
+    setError("SD 卡写入失败");
+    return false;
+  }
+
+  source_.setBufferBytes(ringBytes_);
+  source_.setCookie(cookie_);
+  if (!source_.open(url.c_str())) {
+    setError(source_.lastError().length() ? source_.lastError() : "音频连接失败");
+    out.close();
+    SD.remove(part);
+    return false;
+  }
+
+  dlBytes_ = 0;
+  dlTotal_ = source_.totalBytes();
+
+  uint8_t* buf = static_cast<uint8_t*>(malloc(kDownloadChunk));
+  if (!buf) {
+    setError("内存不足");
+    source_.close();
+    out.close();
+    SD.remove(part);
+    return false;
+  }
+
+  bool ok = true;
+  String why;
+  uint32_t lastData = millis();
+  while (!source_.eof()) {
+    const uint32_t n = source_.read(buf, kDownloadChunk);
+    if (n > 0) {
+      if (out.write(buf, n) != n) {
+        why = "SD 卡写入失败";
+        ok = false;
+        break;
+      }
+      dlBytes_.fetch_add(n);
+      lastData = millis();
+    } else if (source_.failed()) {
+      why = source_.lastError();
+      if (!why.length()) why = "下载中断";
+      ok = false;
+      break;
+    } else if (millis() - lastData > kStallTimeoutMs) {
+      why = "下载超时";
+      ok = false;
+      break;
+    }
+  }
+
+  const uint32_t total = dlTotal_.load();
+  if (ok && total && dlBytes_.load() < total) {
+    why = "下载不完整";
+    ok = false;
+  }
+
+  source_.close();
+  out.close();
+  free(buf);
+
+  if (!ok) {
+    SD.remove(part);
+    setError(why.length() ? why : "下载失败");
+    return false;
+  }
+
+  SD.remove(finalPath);
+  if (!SD.rename(part, finalPath)) {
+    setError("缓存文件保存失败");
+    return false;
+  }
+  LOGI(kTag, "cached %s (%u bytes)", finalPath.c_str(), (unsigned)dlBytes_.load());
+  return true;
+}
+
+bool AudioEngine::playFromSd(const String& url, const Track& track) {
+  ensureCacheDir();
+  const String path = cachePath(track.id);
+
+  bool cached = SD.exists(path) && fileSize(path) > 32 * 1024;
+  if (!cached) {
+    stage_ = Stage::Downloading;
+    dlBytes_ = 0;
+    dlTotal_ = 0;
+    if (!downloadToSd(url, path)) return false;
+    stage_ = Stage::Playing;
+  } else {
+    LOGI(kTag, "cache hit: %s", path.c_str());
+  }
+
+  fileSource_ = new AudioFileSourceFS(SD, path.c_str());
+  if (!fileSource_->isOpen()) {
+    setError("缓存文件打开失败");
+    delete fileSource_;
+    fileSource_ = nullptr;
+    return false;
+  }
+  if (!mp3_.begin(fileSource_, &output_)) {
+    setError("MP3 解码失败");
+    fileSource_->close();
+    delete fileSource_;
+    fileSource_ = nullptr;
+    return false;
+  }
+  LOGI(kTag, "playing cached track %lld", (long long)track.id);
+  return true;
+}
+
+bool AudioEngine::playFromStream(const String& url) {
+  if (!source_.open(url.c_str())) {
+    setError(source_.lastError());
+    return false;
+  }
+  if (!mp3_.begin(&source_, &output_)) {
+    setError("MP3 解码失败");
+    source_.close();
+    return false;
+  }
+  return true;
 }

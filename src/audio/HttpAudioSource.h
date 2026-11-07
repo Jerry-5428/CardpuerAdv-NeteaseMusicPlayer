@@ -37,6 +37,10 @@ class HttpAudioSource : public AudioFileSource {
   // Approximate amount of downloaded-but-not-yet-decoded audio in bytes.
   uint32_t bufferedBytes() const;
 
+  // Progress reporting for the SD pre-fetch path.
+  uint32_t downloadedBytes() const { return downloaded_.load(); }
+  uint32_t totalBytes() const { return totalSize_.load(); }
+
  private:
   static void taskEntry(void* arg);
   void downloadLoop();
